@@ -60,7 +60,7 @@ class CheckoutsResourceTest {
         assertEquals(CheckoutStatus.PAID, checkout.status());
         assertEquals(10000L, checkout.paidAmount());
         assertEquals("BEMVINDO", checkout.coupons().get(0));
-        assertEquals("2024-11-04T18:38:28.573Z", checkout.createdAt());
+        assertEquals(java.time.Instant.parse("2024-11-04T18:38:28.573Z"), checkout.createdAt());
     }
 
     @Test

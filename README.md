@@ -29,12 +29,14 @@ Ele resolve o que todo mundo acaba reescrevendo à mão:
 
 | Disponível | Planejado |
 |---|---|
-| Criar, consultar e listar checkouts (com filtros e paginação por cursor) | Assinaturas |
+| Criar, consultar e listar checkouts (com filtros e paginação por cursor) | |
 | Clientes e produtos: criar, consultar, listar e excluir | |
+| Assinaturas: criar checkout, consultar, listar, cancelar e excluir checkout | |
 | Erros tipados (401, 400, 404, 422, 429, 5xx, conexão) | |
 | Verificação de webhook (secret + HMAC-SHA256) | Publicação no Maven Central |
 | Endpoint de webhook que publica `ApplicationEvent` | |
 | Enums tolerantes a valores novos da API | |
+| Datas tipadas (`Instant` e `LocalDate`) | |
 | Deduplicação opcional de eventos por `id` | |
 
 ## Requisitos
@@ -197,6 +199,37 @@ O `id` do produto (`prod_...`) é o que vai nos itens do checkout. A exclusão (
 `products().delete(id)`) é irreversível: o produto excluído some das listagens e volta com status `ARCHIVED`.
 Endereço e CEP seguem as regras da API (CEP com 8 dígitos, sem hífen; estado com 2 letras).
 
+## Assinaturas
+
+O produto precisa ter um ciclo (`BillingCycle`). O cliente assina pelo checkout, e cada pagamento
+confirmado gera uma assinatura (`subs_...`).
+
+```java
+Checkout checkout = abacatePay.subscriptions().createCheckout(
+        CreateSubscriptionCheckoutRequest.builder()
+                .item("prod_plano_mensal", 1)
+                .customerId("cust_abc123xyz")
+                .externalId("assinatura-123")
+                .methods(PaymentMethod.CARD)
+                .retryPolicy(3, 2) // até 3 tentativas, a cada 2 dias
+                .build());
+// redirecione o cliente para checkout.url()
+
+Subscription assinatura = abacatePay.subscriptions().get("subs_abc123xyz");
+Subscription porCliente = abacatePay.subscriptions().getByCustomerId("cust_abc123xyz");
+Page<Subscription> ativas = abacatePay.subscriptions().list(
+        ListSubscriptionsRequest.builder().status(SubscriptionStatus.ACTIVE).build());
+
+abacatePay.subscriptions().cancel("subs_abc123xyz");
+```
+
+Para boleto, use `methods(PaymentMethod.BOLETO)` com `dueDate` (hoje até 365 dias), `interest` e `fine`. Esses campos
+e o `upSellProductId` não aparecem na documentação pública, então confirme o comportamento antes de usar em produção.
+
+O checkout de assinatura aceita um único item. `deleteCheckout("bill_...")` remove o checkout, mas não cancela
+as assinaturas que ele já gerou: para isso use `cancel`. Se a busca por `customerId` ou `externalId` casar com mais
+de uma assinatura, a API devolve a mais recente.
+
 ## Receber webhooks
 
 Com `abacatepay.webhook.secret` definido e Spring MVC no projeto, o endpoint `POST /abacatepay/webhook` já fica ativo.
@@ -236,7 +269,7 @@ class PagamentoListener {
 
 ### Deduplicação opcional
 
-Declare um bean `ProcessedEventStore` e o endpoint passa a ignorar eventos cujo `id` já foi processado:
+Por padrão a deduplicação vem **desligada**. Declare um bean `ProcessedEventStore` e o endpoint passa a ignorar eventos cujo `id` já foi processado:
 responde `200` sem publicar de novo. O evento só é marcado **depois** que o seu listener termina sem erro,
 então uma falha continua provocando nova tentativa.
 
@@ -249,7 +282,15 @@ ProcessedEventStore processedEventStore() {
 
 O `InMemoryProcessedEventStore` guarda os últimos 10.000 ids na memória: some ao reiniciar e não é
 compartilhado entre instâncias. Com mais de uma instância, implemente a interface com banco ou Redis.
-Duas entregas simultâneas do mesmo evento ainda podem passar; o listener idempotente continua sendo a garantia final.
+O endpoint reivindica o `id` antes de publicar (`tryClaim`) e devolve a reivindicação (`release`) se o listener falhar,
+então entregas simultâneas do mesmo evento têm um único vencedor e uma falha ainda permite a reentrega.
+Se você implementar a interface, `tryClaim` precisa ser atômico (por exemplo `SET NX` no Redis ou `INSERT` com chave única).
+
+O AbacatePay envia o secret na URL (`?webhookSecret=`), e a query string pode aparecer em logs de acesso e em proxies.
+Use HTTPS, não registre a query string e, quando o seu ambiente permitir, prefira o header `X-Webhook-Secret`.
+
+A chave pública usada na assinatura já vem embutida e pode ser trocada com `abacatepay.webhook.public-key`.
+Corpo vazio, secret ausente ou assinatura inválida respondem `401` sem corpo.
 
 Em desenvolvimento, o AbacatePay não consegue chamar `localhost`: use o CLI deles
 (`abacatepay listen --forward-to <url>`) ou um túnel.

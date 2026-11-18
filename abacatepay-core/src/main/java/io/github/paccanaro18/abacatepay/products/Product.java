@@ -1,5 +1,7 @@
 package io.github.paccanaro18.abacatepay.products;
 
+import java.time.Instant;
+
 public record Product(
         String id,
         String externalId,
@@ -12,6 +14,6 @@ public record Product(
         ProductStatus status,
         BillingCycle cycle,
         Boolean hasFile,
-        String createdAt,
-        String updatedAt) {
+        Instant createdAt,
+        Instant updatedAt) {
 }

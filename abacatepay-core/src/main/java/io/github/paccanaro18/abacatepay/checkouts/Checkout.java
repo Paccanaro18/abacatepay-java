@@ -1,5 +1,7 @@
 package io.github.paccanaro18.abacatepay.checkouts;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -20,7 +22,7 @@ public record Checkout(
         String receiptUrl,
         Map<String, Object> metadata,
         List<String> coupons,
-        String dueDate,
-        String createdAt,
-        String updatedAt) {
+        LocalDate dueDate,
+        Instant createdAt,
+        Instant updatedAt) {
 }
