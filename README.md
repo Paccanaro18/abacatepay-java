@@ -31,9 +31,10 @@ Ele resolve o que todo mundo acaba reescrevendo à mão:
 |---|---|
 | Criar checkout (`POST /checkouts/create`) | Consultar e listar checkouts |
 | Erros tipados (401, 400, 422, 429, 5xx, conexão) | Clientes, produtos e assinaturas |
-| Verificação de webhook (secret + HMAC-SHA256) | Deduplicação de eventos por `id` |
-| Endpoint de webhook que publica `ApplicationEvent` | Publicação no Maven Central |
+| Verificação de webhook (secret + HMAC-SHA256) | Publicação no Maven Central |
+| Endpoint de webhook que publica `ApplicationEvent` | |
 | Enums tolerantes a valores novos da API | |
+| Deduplicação opcional de eventos por `id` | |
 
 ## Requisitos
 
@@ -169,6 +170,23 @@ class PagamentoListener {
 | Tudo certo | `200` |
 
 > **Seu listener precisa ser idempotente.** Como falhas provocam nova tentativa, o mesmo `event.id()` pode chegar mais de uma vez.
+
+### Deduplicação opcional
+
+Declare um bean `ProcessedEventStore` e o endpoint passa a ignorar eventos cujo `id` já foi processado:
+responde `200` sem publicar de novo. O evento só é marcado **depois** que o seu listener termina sem erro,
+então uma falha continua provocando nova tentativa.
+
+```java
+@Bean
+ProcessedEventStore processedEventStore() {
+    return new InMemoryProcessedEventStore();
+}
+```
+
+O `InMemoryProcessedEventStore` guarda os últimos 10.000 ids na memória: some ao reiniciar e não é
+compartilhado entre instâncias. Com mais de uma instância, implemente a interface com banco ou Redis.
+Duas entregas simultâneas do mesmo evento ainda podem passar; o listener idempotente continua sendo a garantia final.
 
 Em desenvolvimento, o AbacatePay não consegue chamar `localhost`: use o CLI deles
 (`abacatepay listen --forward-to <url>`) ou um túnel.
