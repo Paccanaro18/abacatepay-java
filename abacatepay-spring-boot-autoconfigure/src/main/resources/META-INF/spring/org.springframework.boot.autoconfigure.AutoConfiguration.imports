@@ -1,0 +1,2 @@
+io.github.paccanaro18.abacatepay.spring.AbacatePayAutoConfiguration
+io.github.paccanaro18.abacatepay.spring.AbacatePayWebhookAutoConfiguration
