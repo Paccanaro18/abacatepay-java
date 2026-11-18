@@ -29,8 +29,8 @@ Ele resolve o que todo mundo acaba reescrevendo à mão:
 
 | Disponível | Planejado |
 |---|---|
-| Criar checkout (`POST /checkouts/create`) | Consultar e listar checkouts |
-| Erros tipados (401, 400, 422, 429, 5xx, conexão) | Clientes, produtos e assinaturas |
+| Criar, consultar e listar checkouts (com filtros e paginação por cursor) | Clientes, produtos e assinaturas |
+| Erros tipados (401, 400, 404, 422, 429, 5xx, conexão) | |
 | Verificação de webhook (secret + HMAC-SHA256) | Publicação no Maven Central |
 | Endpoint de webhook que publica `ApplicationEvent` | |
 | Enums tolerantes a valores novos da API | |
@@ -111,6 +111,32 @@ class CobrancaService {
 Campos opcionais não informados não são enviados à API. A requisição é validada antes do envio
 (item obrigatório, quantidade mínima 1, ao menos um método se `methods` for informado).
 
+### Consultar e listar
+
+```java
+Checkout checkout = abacatePay.checkouts().get("bill_abc123xyz");
+Checkout porPedido = abacatePay.checkouts().getByExternalId("pedido-123");
+
+Page<Checkout> pagina = abacatePay.checkouts().list(
+        ListCheckoutsRequest.builder()
+                .status(CheckoutStatus.PAID)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .limit(50)
+                .build());
+
+while (true) {
+    pagina.items().forEach(c -> System.out.println(c.id()));
+    if (!pagina.hasMore()) {
+        break;
+    }
+    pagina = abacatePay.checkouts().list(
+            ListCheckoutsRequest.builder().limit(50).after(pagina.next()).build());
+}
+```
+
+A listagem devolve só checkouts de pagamento único, do mais novo para o mais antigo. `limit` vai de 1 a 100.
+Ao paginar, repita os mesmos filtros e acrescente `after(pagina.next())`. Um checkout inexistente lança `AbacatePayNotFoundException`.
+
 ### Tratando erros
 
 Toda falha vira uma subclasse de `AbacatePayException`, que traz o `statusCode()`:
@@ -119,6 +145,7 @@ Toda falha vira uma subclasse de `AbacatePayException`, que traz o `statusCode()
 |---|---|
 | `AbacatePayAuthenticationException` | 401: chave inválida |
 | `AbacatePayBusinessException` | 400: regra de negócio |
+| `AbacatePayNotFoundException` | 404: recurso não encontrado |
 | `AbacatePayValidationException` | 422: requisição fora do schema |
 | `AbacatePayRateLimitException` | 429: limite de requisições |
 | `AbacatePayServerException` | 5xx: falha no AbacatePay |
