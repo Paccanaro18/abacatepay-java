@@ -1,0 +1,127 @@
+package io.github.paccanaro18.abacatepay.products;
+
+import io.github.paccanaro18.abacatepay.http.QueryParams;
+
+import java.time.LocalDate;
+
+public record ListProductsRequest(
+        Integer limit,
+        String after,
+        String before,
+        LocalDate startDate,
+        LocalDate endDate,
+        String id,
+        String externalId,
+        ProductStatus status,
+        String name,
+        String keyword,
+        String currency) {
+
+    private static final int MAX_LIMIT = 100;
+
+    public ListProductsRequest {
+        if (limit != null && (limit < 1 || limit > MAX_LIMIT)) {
+            throw new IllegalArgumentException("limit deve ficar entre 1 e " + MAX_LIMIT);
+        }
+        if (status == ProductStatus.UNKNOWN || status == ProductStatus.ARCHIVED) {
+            throw new IllegalArgumentException("O filtro status aceita apenas ACTIVE ou INACTIVE");
+        }
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("startDate não pode ser depois de endDate");
+        }
+    }
+
+    public String toQuery() {
+        return new QueryParams()
+                .add("limit", limit)
+                .add("after", after)
+                .add("before", before)
+                .add("startDate", startDate)
+                .add("endDate", endDate)
+                .add("id", id)
+                .add("externalId", externalId)
+                .add("status", status)
+                .add("name", name)
+                .add("keyword", keyword)
+                .add("currency", currency)
+                .build();
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private Integer limit;
+        private String after;
+        private String before;
+        private LocalDate startDate;
+        private LocalDate endDate;
+        private String id;
+        private String externalId;
+        private ProductStatus status;
+        private String name;
+        private String keyword;
+        private String currency;
+
+        public Builder limit(int limit) {
+            this.limit = limit;
+            return this;
+        }
+
+        public Builder after(String after) {
+            this.after = after;
+            return this;
+        }
+
+        public Builder before(String before) {
+            this.before = before;
+            return this;
+        }
+
+        public Builder startDate(LocalDate startDate) {
+            this.startDate = startDate;
+            return this;
+        }
+
+        public Builder endDate(LocalDate endDate) {
+            this.endDate = endDate;
+            return this;
+        }
+
+        public Builder id(String id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder externalId(String externalId) {
+            this.externalId = externalId;
+            return this;
+        }
+
+        public Builder status(ProductStatus status) {
+            this.status = status;
+            return this;
+        }
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder keyword(String keyword) {
+            this.keyword = keyword;
+            return this;
+        }
+
+        public Builder currency(String currency) {
+            this.currency = currency;
+            return this;
+        }
+
+        public ListProductsRequest build() {
+            return new ListProductsRequest(limit, after, before, startDate, endDate,
+                    id, externalId, status, name, keyword, currency);
+        }
+    }
+}

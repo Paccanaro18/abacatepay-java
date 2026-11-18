@@ -48,10 +48,13 @@ public final class AbacatePayHttpClient {
     }
 
     public <T> T post(String path, Object body, TypeReference<ApiResponse<T>> type) {
-        String json = toJson(body);
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + path));
+        if (body == null) {
+            builder.POST(HttpRequest.BodyPublishers.noBody());
+        } else {
+            builder.header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(toJson(body)));
+        }
         return send(builder, type);
     }
 
