@@ -34,30 +34,34 @@ public class AbacatePayWebhookController {
 
     @PostMapping("${abacatepay.webhook.path:/abacatepay/webhook}")
     public ResponseEntity<Void> receive(
-            @RequestBody byte[] rawBody,
+            @RequestBody(required = false) byte[] rawBody,
             @RequestHeader(name = "X-Webhook-Signature", required = false) String signature,
             @RequestHeader(name = "X-Webhook-Secret", required = false) String secretHeader,
             @RequestParam(name = "webhookSecret", required = false) String secretParam) {
 
         String secret = secretHeader != null ? secretHeader : secretParam;
+        byte[] body = rawBody != null ? rawBody : new byte[0];
 
         WebhookEvent event;
         try {
-            verifier.verify(rawBody, signature, secret);
-            event = WebhookParser.parse(rawBody);
+            verifier.verify(body, signature, secret);
+            event = WebhookParser.parse(body);
         } catch (WebhookVerificationException | WebhookParseException e) {
             return ResponseEntity.status(e.statusCode()).build();
         }
 
         boolean deduplica = processedEvents != null && event.id() != null;
-        if (deduplica && processedEvents.alreadyProcessed(event.id())) {
+        if (deduplica && !processedEvents.tryClaim(event.id())) {
             return ResponseEntity.ok().build();
         }
 
-        publisher.publishEvent(event);
-
-        if (deduplica) {
-            processedEvents.markProcessed(event.id());
+        try {
+            publisher.publishEvent(event);
+        } catch (RuntimeException e) {
+            if (deduplica) {
+                processedEvents.release(event.id());
+            }
+            throw e;
         }
         return ResponseEntity.ok().build();
     }

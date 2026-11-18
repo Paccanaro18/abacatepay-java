@@ -175,4 +175,16 @@ class AbacatePayWebhookControllerTest {
 
         assertThat(store.alreadyProcessed("evt_123")).isFalse();
     }
+
+    @Test
+    void semCorpoDevolve401SemCorpoDoSpring() throws Exception {
+        mvc.perform(post("/abacatepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .param("webhookSecret", SECRET)
+                        .header("X-Webhook-Signature", ASSINATURA))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(""));
+
+        assertThat(publicados).isEmpty();
+    }
 }

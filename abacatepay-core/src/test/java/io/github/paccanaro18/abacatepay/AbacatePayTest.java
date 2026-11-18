@@ -84,4 +84,10 @@ class AbacatePayTest {
     void urlPadraoApontaParaApiV2() {
         assertEquals("https://api.abacatepay.com/v2", AbacatePay.DEFAULT_BASE_URL);
     }
+
+    @Test
+    void chaveEmBrancoFalhaCedo() {
+        assertThrows(IllegalArgumentException.class, () -> new AbacatePay(""));
+        assertThrows(IllegalArgumentException.class, () -> new AbacatePay("   "));
+    }
 }
