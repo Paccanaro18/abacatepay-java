@@ -1,5 +1,7 @@
 package io.github.paccanaro18.abacatepay.spring;
 
+import io.github.paccanaro18.abacatepay.webhook.InMemoryProcessedEventStore;
+import io.github.paccanaro18.abacatepay.webhook.ProcessedEventStore;
 import io.github.paccanaro18.abacatepay.webhook.WebhookEvent;
 import io.github.paccanaro18.abacatepay.webhook.WebhookEventType;
 import io.github.paccanaro18.abacatepay.webhook.WebhookVerifier;
@@ -128,5 +130,49 @@ class AbacatePayWebhookControllerTest {
                 .header("X-Webhook-Signature", ASSINATURA)));
 
         assertThat(erro).hasRootCauseInstanceOf(IllegalStateException.class);
+    }
+
+    private MockMvc montarMvcComStore(ApplicationEventPublisher publisher, ProcessedEventStore store) {
+        AbacatePayWebhookController controller =
+                new AbacatePayWebhookController(new WebhookVerifier(CHAVE, SECRET), publisher, store);
+        return MockMvcBuilders.standaloneSetup(controller)
+                .addPlaceholderValue("abacatepay.webhook.path", "/abacatepay/webhook")
+                .build();
+    }
+
+    private MockHttpServletRequestBuilder requisicaoValida() {
+        return requisicao(CORPO)
+                .param("webhookSecret", SECRET)
+                .header("X-Webhook-Signature", ASSINATURA);
+    }
+
+    @Test
+    void semStoreOMesmoEventoEhPublicadoSempre() throws Exception {
+        mvc.perform(requisicaoValida()).andExpect(status().isOk());
+        mvc.perform(requisicaoValida()).andExpect(status().isOk());
+
+        assertThat(publicados).hasSize(2);
+    }
+
+    @Test
+    void eventoRepetidoNaoEhPublicadoDeNovoMasDevolve200() throws Exception {
+        MockMvc comStore = montarMvcComStore(publicados::add, new InMemoryProcessedEventStore());
+
+        comStore.perform(requisicaoValida()).andExpect(status().isOk());
+        comStore.perform(requisicaoValida()).andExpect(status().isOk());
+
+        assertThat(publicados).hasSize(1);
+    }
+
+    @Test
+    void falhaNoListenerNaoMarcaOEventoComoProcessado() {
+        ProcessedEventStore store = new InMemoryProcessedEventStore();
+        MockMvc comFalha = montarMvcComStore(evento -> {
+            throw new IllegalStateException("falha no listener");
+        }, store);
+
+        catchThrowable(() -> comFalha.perform(requisicaoValida()));
+
+        assertThat(store.alreadyProcessed("evt_123")).isFalse();
     }
 }

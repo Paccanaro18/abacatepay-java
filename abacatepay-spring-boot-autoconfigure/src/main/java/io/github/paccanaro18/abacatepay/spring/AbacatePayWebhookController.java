@@ -2,6 +2,7 @@ package io.github.paccanaro18.abacatepay.spring;
 
 import io.github.paccanaro18.abacatepay.exception.WebhookParseException;
 import io.github.paccanaro18.abacatepay.exception.WebhookVerificationException;
+import io.github.paccanaro18.abacatepay.webhook.ProcessedEventStore;
 import io.github.paccanaro18.abacatepay.webhook.WebhookEvent;
 import io.github.paccanaro18.abacatepay.webhook.WebhookParser;
 import io.github.paccanaro18.abacatepay.webhook.WebhookVerifier;
@@ -18,10 +19,17 @@ public class AbacatePayWebhookController {
 
     private final WebhookVerifier verifier;
     private final ApplicationEventPublisher publisher;
+    private final ProcessedEventStore processedEvents;
 
     public AbacatePayWebhookController(WebhookVerifier verifier, ApplicationEventPublisher publisher) {
+        this(verifier, publisher, null);
+    }
+
+    public AbacatePayWebhookController(WebhookVerifier verifier, ApplicationEventPublisher publisher,
+                                       ProcessedEventStore processedEvents) {
         this.verifier = verifier;
         this.publisher = publisher;
+        this.processedEvents = processedEvents;
     }
 
     @PostMapping("${abacatepay.webhook.path:/abacatepay/webhook}")
@@ -41,7 +49,16 @@ public class AbacatePayWebhookController {
             return ResponseEntity.status(e.statusCode()).build();
         }
 
+        boolean deduplica = processedEvents != null && event.id() != null;
+        if (deduplica && processedEvents.alreadyProcessed(event.id())) {
+            return ResponseEntity.ok().build();
+        }
+
         publisher.publishEvent(event);
+
+        if (deduplica) {
+            processedEvents.markProcessed(event.id());
+        }
         return ResponseEntity.ok().build();
     }
 }

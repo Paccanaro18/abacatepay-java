@@ -1,6 +1,8 @@
 package io.github.paccanaro18.abacatepay.spring;
 
+import io.github.paccanaro18.abacatepay.webhook.ProcessedEventStore;
 import io.github.paccanaro18.abacatepay.webhook.WebhookVerifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -20,7 +22,8 @@ public class AbacatePayWebhookAutoConfiguration {
     @ConditionalOnBean(WebhookVerifier.class)
     @ConditionalOnMissingBean
     public AbacatePayWebhookController abacatePayWebhookController(
-            WebhookVerifier verifier, ApplicationEventPublisher publisher) {
-        return new AbacatePayWebhookController(verifier, publisher);
+            WebhookVerifier verifier, ApplicationEventPublisher publisher,
+            ObjectProvider<ProcessedEventStore> processedEvents) {
+        return new AbacatePayWebhookController(verifier, publisher, processedEvents.getIfAvailable());
     }
 }
