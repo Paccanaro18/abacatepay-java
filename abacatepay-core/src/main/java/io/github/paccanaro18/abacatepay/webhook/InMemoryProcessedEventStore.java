@@ -37,4 +37,14 @@ public final class InMemoryProcessedEventStore implements ProcessedEventStore {
     public void markProcessed(String eventId) {
         ids.add(eventId);
     }
+
+    @Override
+    public boolean tryClaim(String eventId) {
+        return ids.add(eventId);
+    }
+
+    @Override
+    public void release(String eventId) {
+        ids.remove(eventId);
+    }
 }

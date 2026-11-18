@@ -1,11 +1,17 @@
 package io.github.paccanaro18.abacatepay.spring;
 
+import io.github.paccanaro18.abacatepay.webhook.InMemoryProcessedEventStore;
+import io.github.paccanaro18.abacatepay.webhook.ProcessedEventStore;
+import io.github.paccanaro18.abacatepay.webhook.WebhookEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.annotation.ImportCandidates;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.context.event.EventListener;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,5 +67,66 @@ class AbacatePayWebhookAutoConfigurationTest {
                 .forEach(candidatas::add);
 
         assertThat(candidatas).contains(AbacatePayWebhookAutoConfiguration.class.getName());
+    }
+
+    private static final String CHAVE_PUBLICA = "chave-publica-de-teste";
+    private static final String CORPO = "{\"event\":\"checkout.completed\",\"id\":\"evt_123\"}";
+    private static final String ASSINATURA = "jVYDeStZ7MLk3CER9H4OYe80UoAF2/1SHFePGZtNTf0=";
+
+    @Configuration(proxyBeanMethods = false)
+    static class ComStore {
+        @Bean
+        ProcessedEventStore processedEventStore() {
+            return new InMemoryProcessedEventStore();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ContaEventos {
+        static final List<WebhookEvent> RECEBIDOS = new ArrayList<>();
+
+        @Bean
+        Contador contador() {
+            return new Contador();
+        }
+
+        static class Contador {
+            @EventListener
+            void aoReceber(WebhookEvent evento) {
+                RECEBIDOS.add(evento);
+            }
+        }
+    }
+
+    @Test
+    void comStoreRegistradoIgnoraAEntregaDuplicada() {
+        ContaEventos.RECEBIDOS.clear();
+        webRunner.withPropertyValues(CONFIG_COMPLETA)
+                .withPropertyValues("abacatepay.webhook.public-key=" + CHAVE_PUBLICA)
+                .withUserConfiguration(ComStore.class, ContaEventos.class)
+                .run(contexto -> {
+                    AbacatePayWebhookController controller = contexto.getBean(AbacatePayWebhookController.class);
+
+                    controller.receive(CORPO.getBytes(), ASSINATURA, null, "meu-secret");
+                    controller.receive(CORPO.getBytes(), ASSINATURA, null, "meu-secret");
+
+                    assertThat(ContaEventos.RECEBIDOS).hasSize(1);
+                });
+    }
+
+    @Test
+    void semStoreRegistradoCadaEntregaEhPublicada() {
+        ContaEventos.RECEBIDOS.clear();
+        webRunner.withPropertyValues(CONFIG_COMPLETA)
+                .withPropertyValues("abacatepay.webhook.public-key=" + CHAVE_PUBLICA)
+                .withUserConfiguration(ContaEventos.class)
+                .run(contexto -> {
+                    AbacatePayWebhookController controller = contexto.getBean(AbacatePayWebhookController.class);
+
+                    controller.receive(CORPO.getBytes(), ASSINATURA, null, "meu-secret");
+                    controller.receive(CORPO.getBytes(), ASSINATURA, null, "meu-secret");
+
+                    assertThat(ContaEventos.RECEBIDOS).hasSize(2);
+                });
     }
 }
