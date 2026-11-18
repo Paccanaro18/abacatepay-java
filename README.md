@@ -29,7 +29,8 @@ Ele resolve o que todo mundo acaba reescrevendo à mão:
 
 | Disponível | Planejado |
 |---|---|
-| Criar, consultar e listar checkouts (com filtros e paginação por cursor) | Clientes, produtos e assinaturas |
+| Criar, consultar e listar checkouts (com filtros e paginação por cursor) | Assinaturas |
+| Clientes e produtos: criar, consultar, listar e excluir | |
 | Erros tipados (401, 400, 404, 422, 429, 5xx, conexão) | |
 | Verificação de webhook (secret + HMAC-SHA256) | Publicação no Maven Central |
 | Endpoint de webhook que publica `ApplicationEvent` | |
@@ -160,6 +161,41 @@ try {
     log.warn("AbacatePay respondeu {}: {}", e.statusCode(), e.getMessage());
 }
 ```
+
+## Clientes e produtos
+
+```java
+Customer cliente = abacatePay.customers().create(
+        CreateCustomerRequest.builder()
+                .email("joao@exemplo.com")
+                .name("João Silva")
+                .taxId("11144477735")
+                .build());
+
+Product produto = abacatePay.products().create(
+        CreateProductRequest.builder()
+                .externalId("camiseta-premium")
+                .name("Camiseta Premium")
+                .price(8990) // em centavos
+                .build());
+
+Product plano = abacatePay.products().create(
+        CreateProductRequest.builder()
+                .externalId("plano-mensal")
+                .name("Plano Mensal")
+                .price(4990)
+                .cycle(BillingCycle.MONTHLY)
+                .trialDays(7)
+                .build());
+
+Customer porEmail = abacatePay.customers().getByEmail("joao@exemplo.com");
+Product porExternalId = abacatePay.products().getByExternalId("camiseta-premium");
+Page<Customer> clientes = abacatePay.customers().list();
+```
+
+O `id` do produto (`prod_...`) é o que vai nos itens do checkout. A exclusão (`customers().delete(id)` e
+`products().delete(id)`) é irreversível: o produto excluído some das listagens e volta com status `ARCHIVED`.
+Endereço e CEP seguem as regras da API (CEP com 8 dígitos, sem hífen; estado com 2 letras).
 
 ## Receber webhooks
 
