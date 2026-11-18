@@ -8,14 +8,15 @@ SDK em Java e starter para Spring Boot da [API v2 do AbacatePay](https://docs.ab
 ## O que é
 
 O AbacatePay é um gateway de pagamentos brasileiro focado em Pix. Ele expõe uma API HTTP, e a documentação lista SDKs oficiais
-em várias linguagens. Para JVM existem os oficiais em Java e Kotlin, mas eles foram feitos para a **API v1 (legado)**.
-Este projeto cobre a **API v2** na JVM, com integração nativa ao Spring Boot.
+em várias linguagens. Pelo que pesquisei, os de Java e Kotlin foram feitos para a **API v1 (legado)**; confira o README deles,
+porque podem ter sido atualizados. Este projeto cobre a **API v2** na JVM, com integração nativa ao Spring Boot.
 
 Ele resolve o que todo mundo acaba reescrevendo à mão:
 
 - montar a requisição e ler o envelope `{success, data, error}`;
 - traduzir erros HTTP em exceções tipadas;
-- verificar a assinatura dos webhooks (secret + HMAC-SHA256) e expor um endpoint pronto.
+- verificar a assinatura dos webhooks (secret + HMAC-SHA256) e expor um endpoint pronto;
+- evitar processar duas vezes o mesmo evento, quando o provedor reenvia.
 
 ## Módulos
 
@@ -33,11 +34,11 @@ Ele resolve o que todo mundo acaba reescrevendo à mão:
 | Clientes e produtos: criar, consultar, listar e excluir | |
 | Assinaturas: criar checkout, consultar, listar, cancelar e excluir checkout | |
 | Erros tipados (401, 400, 404, 422, 429, 5xx, conexão) | |
-| Verificação de webhook (secret + HMAC-SHA256) | Publicação no Maven Central |
-| Endpoint de webhook que publica `ApplicationEvent` | |
+| Verificação de webhook (secret + HMAC-SHA256) | Checkout transparente, links de pagamento e saques |
+| Endpoint de webhook que publica `ApplicationEvent` | Publicação no Maven Central |
 | Enums tolerantes a valores novos da API | |
 | Datas tipadas (`Instant` e `LocalDate`) | |
-| Deduplicação opcional de eventos por `id` | |
+| Deduplicação opcional de eventos por `id` (atômica) | |
 
 ## Requisitos
 
@@ -111,6 +112,7 @@ class CobrancaService {
 }
 ```
 
+As datas dos modelos são tipadas: `createdAt` e `updatedAt` vêm como `Instant`, e o vencimento (`dueDate`) como `LocalDate`.
 Campos opcionais não informados não são enviados à API. A requisição é validada antes do envio
 (item obrigatório, quantidade mínima 1, ao menos um método se `methods` for informado).
 
@@ -261,17 +263,18 @@ class PagamentoListener {
 | Situação | Resposta |
 |---|---|
 | Secret ou assinatura inválidos ou ausentes | `401`, sem corpo (não revela qual verificação falhou) |
+| Corpo vazio | `401`, sem corpo |
 | Assinatura válida, mas corpo inválido | `400` |
 | Seu listener lança exceção | `500`: o AbacatePay **tenta de novo** |
+| Evento repetido (com deduplicação ligada) | `200`, sem publicar de novo |
 | Tudo certo | `200` |
 
 > **Seu listener precisa ser idempotente.** Como falhas provocam nova tentativa, o mesmo `event.id()` pode chegar mais de uma vez.
 
 ### Deduplicação opcional
 
-Por padrão a deduplicação vem **desligada**. Declare um bean `ProcessedEventStore` e o endpoint passa a ignorar eventos cujo `id` já foi processado:
-responde `200` sem publicar de novo. O evento só é marcado **depois** que o seu listener termina sem erro,
-então uma falha continua provocando nova tentativa.
+Por padrão a deduplicação vem **desligada**. Declare um bean `ProcessedEventStore` e o endpoint passa a ignorar eventos cujo `id`
+já foi recebido: responde `200` sem publicar de novo.
 
 ```java
 @Bean
@@ -280,20 +283,23 @@ ProcessedEventStore processedEventStore() {
 }
 ```
 
-O `InMemoryProcessedEventStore` guarda os últimos 10.000 ids na memória: some ao reiniciar e não é
-compartilhado entre instâncias. Com mais de uma instância, implemente a interface com banco ou Redis.
-O endpoint reivindica o `id` antes de publicar (`tryClaim`) e devolve a reivindicação (`release`) se o listener falhar,
-então entregas simultâneas do mesmo evento têm um único vencedor e uma falha ainda permite a reentrega.
-Se você implementar a interface, `tryClaim` precisa ser atômico (por exemplo `SET NX` no Redis ou `INSERT` com chave única).
+O endpoint reivindica o `id` antes de publicar (`tryClaim`) e devolve a reivindicação (`release`) se o seu listener falhar.
+Assim, entregas simultâneas do mesmo evento têm um único vencedor, e uma falha continua provocando nova tentativa.
 
-O AbacatePay envia o secret na URL (`?webhookSecret=`), e a query string pode aparecer em logs de acesso e em proxies.
-Use HTTPS, não registre a query string e, quando o seu ambiente permitir, prefira o header `X-Webhook-Secret`.
+O `InMemoryProcessedEventStore` guarda os últimos 10.000 ids na memória: some ao reiniciar e não é compartilhado entre
+instâncias. Com mais de uma instância, implemente a interface com banco ou Redis. Nesse caso, `tryClaim` precisa ser
+atômico (por exemplo `SET NX` no Redis ou `INSERT` com chave única).
 
-A chave pública usada na assinatura já vem embutida e pode ser trocada com `abacatepay.webhook.public-key`.
-Corpo vazio, secret ausente ou assinatura inválida respondem `401` sem corpo.
+### Segurança do endpoint
 
-Em desenvolvimento, o AbacatePay não consegue chamar `localhost`: use o CLI deles
-(`abacatepay listen --forward-to <url>`) ou um túnel.
+- O AbacatePay envia o secret na URL (`?webhookSecret=`), e a query string pode aparecer em logs de acesso e em proxies.
+  Use HTTPS, não registre a query string e, quando o seu ambiente permitir, prefira o header `X-Webhook-Secret`.
+- A chave pública usada na assinatura já vem embutida e pode ser trocada com `abacatepay.webhook.public-key`.
+
+### Testando em desenvolvimento
+
+O AbacatePay não consegue chamar `localhost`: use o CLI deles (`abacatepay listen --forward-to <url>`) ou um túnel.
+O CLI encaminha a assinatura, mas não o secret, então ponha `?webhookSecret=...` na URL de destino (entre aspas no PowerShell).
 
 ## Usar sem Spring
 
