@@ -14,6 +14,8 @@ public final class FakeApi implements AutoCloseable {
     private final HttpServer server;
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final AtomicReference<String> body = new AtomicReference<>();
+    private final AtomicReference<String> uri = new AtomicReference<>();
+    private final AtomicReference<String> method = new AtomicReference<>();
 
     public FakeApi() {
         try {
@@ -31,6 +33,8 @@ public final class FakeApi implements AutoCloseable {
     public void respond(String path, int status, String responseBody) {
         server.createContext(path, exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            uri.set(exchange.getRequestURI().toString());
+            method.set(exchange.getRequestMethod());
             body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             exchange.getResponseHeaders().add("Content-Type", "application/json");
 
@@ -48,6 +52,14 @@ public final class FakeApi implements AutoCloseable {
 
     public String lastBody() {
         return body.get();
+    }
+
+    public String lastUri() {
+        return uri.get();
+    }
+
+    public String lastMethod() {
+        return method.get();
     }
 
     @Override

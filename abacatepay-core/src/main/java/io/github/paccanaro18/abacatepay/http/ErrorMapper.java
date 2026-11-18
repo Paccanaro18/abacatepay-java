@@ -16,6 +16,7 @@ final class ErrorMapper {
         return switch (status) {
             case 400 -> new AbacatePayBusinessException(message);
             case 401 -> new AbacatePayAuthenticationException(message);
+            case 404 -> new AbacatePayNotFoundException(message);
             case 422 -> new AbacatePayValidationException(message);
             case 429 -> new AbacatePayRateLimitException(message, retryAfterSeconds);
             default -> status >= 500

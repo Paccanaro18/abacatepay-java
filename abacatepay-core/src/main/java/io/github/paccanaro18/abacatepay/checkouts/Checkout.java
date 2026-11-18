@@ -18,5 +18,9 @@ public record Checkout(
         List<CheckoutItem> items,
         String customerId,
         String receiptUrl,
-        Map<String, Object> metadata) {
+        Map<String, Object> metadata,
+        List<String> coupons,
+        String dueDate,
+        String createdAt,
+        String updatedAt) {
 }
